@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"time"
 
 	"github.com/windbnb/notification-service/model"
 	"github.com/windbnb/notification-service/repository"
@@ -36,61 +38,89 @@ func (s *RatingService) UpdateUserNotificationSettings(NotificationSettingsReque
 	return &notificationSettingsData, nil
 }
 
-// func (s *RatingService) SaveAccomodationRating(accomodationRatingRequest *model.AccomodationRatingRequest, ctx context.Context) (*model.AccomodationRating, error) {
-// 	span := tracer.StartSpanFromContext(ctx, "saveAccomodationRatingService")
-// 	defer span.Finish()
+func (s *RatingService) GetUserNotificationSettings(userId uint, ctx context.Context) (*model.NotificationSettings, error) {
+	span := tracer.StartSpanFromContext(ctx, "getUserNotificationSettingsService")
+	defer span.Finish()
 
-// 	ctx = tracer.ContextWithSpan(context.Background(), span)
+	ctx = tracer.ContextWithSpan(context.Background(), span)
 
-// 	_, err := s.Repo.DeleteGuestAccomodationRatings(accomodationRatingRequest.GuestId, accomodationRatingRequest.AccomodationId, ctx)
-// 	if err != nil {
-// 		return nil, err
-// 	}
+	notificationSettings, err := s.Repo.FindUserNotificationSettings(userId, ctx)
+	if err != nil {
+		return nil, err
+	}
 
-// 	// Checks
-// 	if accomodationRatingRequest.Raiting < 1 || accomodationRatingRequest.Raiting > 5 {
-// 		return nil, errors.New("rating must be between 1 and 5")
-// 	}
+	return notificationSettings, nil
+}
 
-// 	// Get if had accomodation
+func (s *RatingService) SaveNotification(notification *model.NotificationRequest, ctx context.Context) (*model.Notification, error) {
+	span := tracer.StartSpanFromContext(ctx, "saveNotificationService")
+	defer span.Finish()
 
-// 	var accomodationRatingRequestData = model.AccomodationRating{
-// 		GuestId:        accomodationRatingRequest.GuestId,
-// 		AccomodationId: accomodationRatingRequest.AccomodationId,
-// 		Raiting:        accomodationRatingRequest.Raiting}
+	ctx = tracer.ContextWithSpan(context.Background(), span)
 
-// 	s.Repo.RateAccomodation(&accomodationRatingRequestData, ctx)
+	// Checks
+	notificationSettings, err := s.Repo.FindUserNotificationSettings(notification.UserId, ctx)
+	if err != nil {
+		return nil, err
+	}
 
-// 	return &accomodationRatingRequestData, nil
-// }
+	fmt.Print(notification.NotifType)
 
-// func (s *RatingService) GetAverageHostRating(hostId uint, ctx context.Context) (*model.HostAvgRating, error) {
-// 	span := tracer.StartSpanFromContext(ctx, "getAverageHostRatingService")
-// 	defer span.Finish()
+	switch notification.NotifType {
+	case "ResRequest":
+		if !notificationSettings.ResRequest {
+			return nil, nil
+		}
+	case "ResCancel":
+		if !notificationSettings.ResCancel {
+			return nil, nil
+		}
 
-// 	ctx = tracer.ContextWithSpan(context.Background(), span)
+	case "HostReview":
+		if !notificationSettings.HostReview {
+			return nil, nil
+		}
 
-// 	ratings, err := s.Repo.FindAllHostRatings(uint(hostId), ctx)
-// 	if err != nil {
-// 		return nil, err
-// 	}
+	case "AccommodationReview":
+		if !notificationSettings.AccommodationReview {
+			return nil, nil
+		}
 
-// 	var avgRating float32 = 0
-// 	for _, rating := range *ratings {
-// 		avgRating += float32(rating.Raiting)
-// 	}
+	case "ReservationResponse":
+		if !notificationSettings.ReservationResponse {
+			return nil, nil
+		}
+	}
 
-// 	if len(*ratings) > 0 {
-// 		avgRating /= float32(len(*ratings))
-// 	}
+	notificationData := model.Notification{
+		UserId:     notification.UserId,
+		Timestamp:  time.Now(),
+		NotifTitle: notification.NotifTitle,
+		NotifType:  notification.NotifType,
+		Seen:       false,
+	}
 
-// 	var result = model.HostAvgRating{
-// 		HostId:         uint(hostId),
-// 		AverageRaiting: avgRating,
-// 	}
+	notificationResult, err := s.Repo.AddNotification(&notificationData, ctx)
+	if err != nil {
+		return nil, err
+	}
 
-// 	return &result, nil
-// }
+	return notificationResult, nil
+}
+
+func (s *RatingService) GetUserRecentNotification(userId uint, ctx context.Context) (*[]model.Notification, error) {
+	span := tracer.StartSpanFromContext(ctx, "getUserNotificationSettingsService")
+	defer span.Finish()
+
+	ctx = tracer.ContextWithSpan(context.Background(), span)
+
+	notifications, err := s.Repo.GetUserRecentNotification(userId, 20, ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return notifications, nil
+}
 
 // func (s *RatingService) GetAverageAccomodationRating(accomodationId uint, ctx context.Context) (*model.AccomodationAvgRating, error) {
 // 	span := tracer.StartSpanFromContext(ctx, "getAverageAccomodationRatingService")

@@ -9,6 +9,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type Repository struct {
@@ -32,11 +33,44 @@ func (r *Repository) AddNotification(notification *model.Notification, ctx conte
 	return notification, nil
 }
 
-func (r *Repository) FindUserNotificationSettings(userId uint, ctx context.Context) (*[]model.NotificationSettings, error) {
+func (r *Repository) GetUserRecentNotification(userId uint, findLimit uint, ctx context.Context) (*[]model.Notification, error) {
+	span := tracer.StartSpanFromContext(ctx, "getUserRecentNotificationRepository")
+	defer span.Finish()
+
+	dbCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	filter := bson.D{
+		{"userId", userId},
+	}
+	options := options.Find().SetSort(bson.M{"timestamp": -1}).SetLimit(20) // Zamijenite "timestamp" sa poljem koje označava vreme dodavanja
+
+	cursor, err := r.Db.Collection("notifications").Find(dbCtx, filter, options)
+	if err != nil {
+		tracer.LogError(span, err)
+		return nil, err
+	}
+
+	var notifications = []model.Notification{}
+
+	for cursor.Next(dbCtx) {
+		var notification model.Notification
+		err := cursor.Decode(&notification)
+		if err != nil {
+			tracer.LogError(span, err)
+			continue
+		}
+
+		notifications = append(notifications, notification)
+	}
+
+	return &notifications, nil
+}
+
+func (r *Repository) FindUserNotificationSettings(userId uint, ctx context.Context) (*model.NotificationSettings, error) {
 	span := tracer.StartSpanFromContext(ctx, "findUserNotificationSettingsRepository")
 	defer span.Finish()
 
-	notificationSettingsList := []model.NotificationSettings{}
 	dbCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -44,24 +78,24 @@ func (r *Repository) FindUserNotificationSettings(userId uint, ctx context.Conte
 		{"userId", userId},
 	}
 
-	cursor, err := r.Db.Collection("notification-settings").Find(dbCtx, filter)
-	if err != nil {
-		tracer.LogError(span, err)
-		return nil, err
-	}
+	cursor := r.Db.Collection("notification-settings").FindOne(dbCtx, filter)
 
-	for cursor.Next(dbCtx) {
-		var notificationSettings model.NotificationSettings
-		err := cursor.Decode(&notificationSettings)
-		if err != nil {
-			tracer.LogError(span, err)
-			continue
+	var notificationSettings model.NotificationSettings
+	err := cursor.Decode(&notificationSettings)
+	if err != nil {
+		emptySettings := model.NotificationSettings{
+			UserId:              userId,
+			ResRequest:          true,
+			ResCancel:           true,
+			HostReview:          true,
+			AccommodationReview: true,
+			ReservationResponse: true,
 		}
 
-		notificationSettingsList = append(notificationSettingsList, notificationSettings)
+		return &emptySettings, nil
 	}
 
-	return &notificationSettingsList, nil
+	return &notificationSettings, nil
 }
 
 func (r *Repository) DeleteNotificationSettings(userId uint, ctx context.Context) (int64, error) {
