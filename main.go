@@ -25,7 +25,7 @@ func main() {
 
 	db := util.ConnectToMongoDatabase()
 
-	tracer, closer := tracer.Init("user-service")
+	tracer, closer := tracer.Init("notification-service")
 	opentracing.SetGlobalTracer(tracer)
 	router := router.ConfigureRouter(&handler.Handler{
 		Tracer: tracer,

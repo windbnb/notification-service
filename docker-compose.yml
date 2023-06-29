@@ -1,53 +1,54 @@
 version: "3"
 
-x-logging: &fluent-bit
-    driver: fluentd
-    options:
-        fluentd-address:  172.21.0.2:24224
+# x-logging: &fluent-bit
+#     driver: fluentd
+#     options:
+#         fluentd-address:  172.21.0.5:24224
 
 services:
-  review-database:
+  notification-database:
     image: mongo
     restart: always
     networks:
       - servers
       - monitoring
+    container_name: notification-database
     environment:
       - MONGO_INITDB_ROOT_USERNAME=user
       - MONGO_INITDB_ROOT_PASSWORD=pass
     ports:
-      - "27018:27017"
+      - "27019:27017"
     volumes:
       - './database-data:/data/db'
-    logging: *fluent-bit
+    # logging: *fluent-bit
     
 
-  review-service:
+  notification-service:
     build: .
     restart: on-failure
     networks:
       - servers
-      - monitoring
-    container_name: review-service
+    container_name: notification-service
     environment:
-      DATABASE_USER: postgres
-      DATABASE_PASSWORD: root
-      SERVICE_PATH:  0.0.0.0:8082
-      JAEGER_SERVICE_NAME: review-service
+      SERVICE_PATH:  0.0.0.0:8085
+      DATABASE_CONNECTION_STRING: mongodb://user:pass@notification-database:27017
+      JAEGER_SERVICE_NAME: notification-service
       JAEGER_AGENT_HOST: jaeger
       JAEGER_AGENT_PORT: 6831
       JAEGER_SAMPLER_MANAGER_HOST_PORT: jaeger:5778
       JAEGER_SAMPLER_TYPE: const
       JAEGER_SAMPLER_PARAM: 1
     ports:
-      - "8082:8082"
-    logging: *fluent-bit
+      - "8085:8085"
+    # logging: *fluent-bit
     depends_on:
-      review-database:
-        condition: service_healthy
+      - notification-database
+    # depends_on:
+      # notification-database:
+        # condition: service_healthy
 
 volumes:
-  review-data:
+  notification-data:
 
 networks:
   servers:
